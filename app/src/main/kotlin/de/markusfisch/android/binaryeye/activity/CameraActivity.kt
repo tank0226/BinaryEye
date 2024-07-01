@@ -9,6 +9,7 @@ import android.graphics.Matrix
 import android.graphics.Rect
 import android.hardware.Camera
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.support.design.widget.FloatingActionButton
 import android.support.v7.app.AppCompatActivity
@@ -52,6 +53,8 @@ import de.markusfisch.android.zxingcpp.ZxingCpp.BarcodeFormat
 import de.markusfisch.android.zxingcpp.ZxingCpp.Binarizer
 import de.markusfisch.android.zxingcpp.ZxingCpp.ReaderOptions
 import de.markusfisch.android.zxingcpp.ZxingCpp.Result
+import java.io.FileInputStream
+import java.util.Scanner
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -135,7 +138,7 @@ class CameraActivity : AppCompatActivity() {
 		initDetectorView()
 
 		if (intent?.action == Intent.ACTION_SEND &&
-			intent.type == "text/plain"
+			intent.type?.startsWith("text/") == true
 		) {
 			handleSendText(intent)
 		}
@@ -347,9 +350,34 @@ class CameraActivity : AppCompatActivity() {
 
 	private fun handleSendText(intent: Intent) {
 		val text = intent.getStringExtra(Intent.EXTRA_TEXT)
+
 		if (text?.isEmpty() == false) {
 			startActivity(MainActivity.getEncodeIntent(this, text, true))
 			finish()
+			return
+		}
+
+		// Read text from file.
+		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+			@Suppress("DEPRECATION")
+			intent.getParcelableExtra(Intent.EXTRA_STREAM) as Uri?
+		} else {
+			intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+		}?.let { textUri ->
+			val file = contentResolver.openFileDescriptor(textUri, "r")
+			if (file != null) {
+				val fs = FileInputStream(file.fileDescriptor)
+				val scn = Scanner(fs).useDelimiter("\\A")
+				if (scn.hasNext()) {
+					startActivity(
+						MainActivity.getEncodeIntent(
+							this, scn.next(), true
+						)
+					)
+					finish()
+				}
+				file.close()
+			}
 		}
 	}
 
